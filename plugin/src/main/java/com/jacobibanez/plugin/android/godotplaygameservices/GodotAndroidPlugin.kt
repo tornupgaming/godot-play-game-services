@@ -413,7 +413,10 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
 
     /**
      * Saves game data to the Google Cloud. The [com.jacobibanez.plugin.android.godotplaygameservices.signals.SnapshotSignals.gameSaved]
-     * signal will be emitted after saving the game.
+     * signal will be emitted once the snapshot commit completes, with `true` only if the commit succeeded.
+     * It is also emitted with `false` if the snapshot could not be opened, written or committed, or
+     * if a conflict was found (in which case the [com.jacobibanez.plugin.android.godotplaygameservices.signals.SnapshotSignals.conflictEmitted]
+     * signal is emitted first).
      *
      * @param fileName The name of the save file. Must be between 1 and 100 non-URL-reserved
      * characters (a-z, A-Z, 0-9, or the symbols "-", ".", "_", or "~").
@@ -421,6 +424,8 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
      * @param saveData A ByteArray with the saved data of the game.
      * @param playedTimeMillis The played time of this snapshot in milliseconds.
      * @param progressValue The progress value for this snapshot.
+     * @param resolutionPolicy The [conflict resolution policy](https://developers.google.com/android/reference/com/google/android/gms/games/SnapshotsClient#RESOLUTION_POLICY_HIGHEST_PROGRESS)
+     * used when opening the snapshot. The GDScript client uses `RESOLUTION_POLICY_HIGHEST_PROGRESS` (4) by default.
      */
     @UsedByGodot
     fun saveGame(
@@ -428,8 +433,16 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
         description: String,
         saveData: ByteArray,
         playedTimeMillis: Long,
-        progressValue: Long
-    ) = snapshotsProxy.saveGame(fileName, description, saveData, playedTimeMillis, progressValue)
+        progressValue: Long,
+        resolutionPolicy: Int
+    ) = snapshotsProxy.saveGame(
+        fileName,
+        description,
+        saveData,
+        playedTimeMillis,
+        progressValue,
+        resolutionPolicy
+    )
 
     /**
      * Loads game data from the Google Cloud. This method emits the [com.jacobibanez.plugin.android.godotplaygameservices.signals.SnapshotSignals.gameLoaded]
@@ -437,11 +450,13 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
      *
      * @param fileName The name of the save file. Must be between 1 and 100 non-URL-reserved
      * characters (a-z, A-Z, 0-9, or the symbols "-", ".", "_", or "~").
-     * @param createIfNotFound False by default. If true, the snapshot will be created if one cannot be found.
+     * @param createIfNotFound If true, the snapshot will be created if one cannot be found.
+     * @param resolutionPolicy The [conflict resolution policy](https://developers.google.com/android/reference/com/google/android/gms/games/SnapshotsClient#RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED)
+     * used when opening the snapshot. The GDScript client uses `RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED` (3) by default.
      */
     @UsedByGodot
-    fun loadGame(fileName: String, createIfNotFound: Boolean = false) =
-        snapshotsProxy.loadGame(fileName, createIfNotFound)
+    fun loadGame(fileName: String, createIfNotFound: Boolean, resolutionPolicy: Int) =
+        snapshotsProxy.loadGame(fileName, createIfNotFound, resolutionPolicy)
 
     /**
      * Loads the list of [com.google.android.gms.games.snapshot.SnapshotMetadata](https://developers.google.com/android/reference/com/google/android/gms/games/snapshot/SnapshotMetadata)

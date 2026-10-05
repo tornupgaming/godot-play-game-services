@@ -70,39 +70,63 @@ class SnapshotsProxy(
         description: String,
         saveData: ByteArray,
         playedTimeMillis: Long,
-        progressValue: Long
+        progressValue: Long,
+        resolutionPolicy: Int = RESOLUTION_POLICY_HIGHEST_PROGRESS
     ) {
         Log.d(tag, "Saving game data with name $fileName and description ${description}.")
-        snapshotsClient.open(fileName, true, RESOLUTION_POLICY_HIGHEST_PROGRESS)
-            .addOnSuccessListener { dataOrConflict ->
+        snapshotsClient.open(fileName, true, resolutionPolicy)
+            .addOnCompleteListener { task ->
+                if (!task.isSuccessful) {
+                    Log.e(
+                        tag,
+                        "Error while opening Snapshot $fileName for saving. Cause: ${task.exception}"
+                    )
+                    emitGameSaved(false, fileName, description)
+                    return@addOnCompleteListener
+                }
+                val dataOrConflict = task.result
                 if (dataOrConflict.isConflict) {
                     handleConflict(Origin.SAVE.name, dataOrConflict.conflict)
-                    return@addOnSuccessListener
+                    emitGameSaved(false, fileName, description)
+                    return@addOnCompleteListener
                 }
-                dataOrConflict.data?.let { snapshot ->
-                    snapshot.snapshotContents.writeBytes(saveData)
-                    val metadata = SnapshotMetadataChange.Builder().apply {
-                        setDescription(description)
-                        setPlayedTimeMillis(playedTimeMillis)
-                        setProgressValue(progressValue)
-                    }.build()
+                val snapshot = dataOrConflict.data
+                if (snapshot == null) {
+                    emitGameSaved(false, fileName, description)
+                    return@addOnCompleteListener
+                }
+                if (!snapshot.snapshotContents.writeBytes(saveData)) {
+                    Log.e(tag, "Error while writing data to Snapshot $fileName.")
+                    snapshotsClient.discardAndClose(snapshot)
+                    emitGameSaved(false, fileName, description)
+                    return@addOnCompleteListener
+                }
+                val metadata = SnapshotMetadataChange.Builder().apply {
+                    setDescription(description)
+                    setPlayedTimeMillis(playedTimeMillis)
+                    setProgressValue(progressValue)
+                }.build()
 
-                    snapshotsClient.commitAndClose(snapshot, metadata)
-                    emitSignal(
-                        godot,
-                        GODOT_PLUGIN_NAME,
-                        gameSaved,
-                        true,
-                        fileName,
-                        description
-                    )
-                }
+                snapshotsClient.commitAndClose(snapshot, metadata)
+                    .addOnCompleteListener { commitTask ->
+                        if (!commitTask.isSuccessful) {
+                            Log.e(
+                                tag,
+                                "Error while committing Snapshot $fileName. Cause: ${commitTask.exception}"
+                            )
+                        }
+                        emitGameSaved(commitTask.isSuccessful, fileName, description)
+                    }
             }
     }
 
-    fun loadGame(fileName: String, createIfNotFound: Boolean) {
+    fun loadGame(
+        fileName: String,
+        createIfNotFound: Boolean,
+        resolutionPolicy: Int = RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED
+    ) {
         Log.d(tag, "Loading snapshot with name $fileName.")
-        snapshotsClient.open(fileName, createIfNotFound, RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED)
+        snapshotsClient.open(fileName, createIfNotFound, resolutionPolicy)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
                     val dataOrConflict = task.result
@@ -205,6 +229,17 @@ class SnapshotsProxy(
             }
     }
 
+    private fun emitGameSaved(isSaved: Boolean, fileName: String, description: String) {
+        emitSignal(
+            godot,
+            GODOT_PLUGIN_NAME,
+            gameSaved,
+            isSaved,
+            fileName,
+            description
+        )
+    }
+
     private fun emitDeleteResult(success: Boolean, snapshotId: String) {
         emitSignal(
             godot,
@@ -213,7 +248,9 @@ class SnapshotsProxy(
             success,
             snapshotId
         )
-    }    private fun handleConflict(origin: String, conflict: SnapshotConflict?) {
+    }
+
+    private fun handleConflict(origin: String, conflict: SnapshotConflict?) {
         conflict?.let {
             val snapshot = it.snapshot
             val fileName = snapshot.metadata.uniqueName

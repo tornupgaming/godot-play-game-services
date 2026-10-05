@@ -4,9 +4,22 @@ class_name PlayGamesSnapshotsClient extends Node
 ##
 ## This autoload exposes methods and signals to save and load games in the Google cloud of the player.
 
-## Signal emitted after calling the [method save_game] method.[br]
+## Policy used to automatically resolve a conflict between the local and the server
+## versions of a snapshot when it is opened. The values match the [code]RESOLUTION_POLICY_*[/code]
+## constants of the Google Play Games [code]SnapshotsClient[/code].
+enum ResolutionPolicy {
+	MANUAL = -1, ## Don't resolve conflicts. The [signal conflict_emitted] signal will be emitted instead.
+	LONGEST_PLAYTIME = 1, ## Keep the snapshot with the longest played time.
+	LAST_KNOWN_GOOD = 2, ## Keep the last known good version of the snapshot.
+	MOST_RECENTLY_MODIFIED = 3, ## Keep the most recently modified snapshot.
+	HIGHEST_PROGRESS = 4 ## Keep the snapshot with the highest progress value.
+}
+
+## Signal emitted after calling the [method save_game] method, once the snapshot
+## commit completes or the save fails. It's also emitted with [code]false[/code] after
+## the [signal conflict_emitted] signal if a conflict is found while saving.[br]
 ## [br]
-## [param is_saved]: Wheter if the game was saved or not.[br]
+## [param is_saved]: Whether the snapshot was committed or not.[br]
 ## [param save_data_name]: The save file name.[br]
 ## [param save_data_description]: The save file description.
 signal game_saved(is_saved: bool, save_data_name: String, save_data_description: String)
@@ -27,6 +40,12 @@ signal conflict_emitted(conflict: PlayGamesSnapshotConflict)
 ## [br]
 ## [param snapshots]: The list of snapshots for the current signed in player.
 signal snapshots_loaded(snapshots: Array[PlayGamesSnapshotMetadata])
+
+## Signal emitted after calling the [method delete_snapshot] method.[br]
+## [br]
+## [param is_deleted]: Whether the snapshot was deleted or not.[br]
+## [param snapshot_id]: The snapshot identifier.
+signal snapshot_deleted(is_deleted: bool, snapshot_id: String)
 
 func _ready() -> void:
 	if GodotPlayGameServices.android_plugin:
@@ -52,6 +71,10 @@ func _ready() -> void:
 				snapshots.append(PlayGamesSnapshotMetadata.new(dictionary))
 			snapshots_loaded.emit(snapshots)
 		)
+		GodotPlayGameServices.android_plugin.snapshotDeleted.connect(
+			func(is_deleted: bool, snapshot_id: String):
+				snapshot_deleted.emit(is_deleted, snapshot_id)
+		)
 
 ## Opens a new window to display the saved games for the current player. If you select
 ## a saved game, the [signal game_loaded] signal will be emitted.[br]
@@ -76,26 +99,33 @@ func show_saved_games(
 ## [param fileName]: The name of the save file. Must be between 1 and 100 non-URL-reserved characters (a-z, A-Z, 0-9, or the symbols "-", ".", "_", or "~").[br]
 ## [param saveData]: A String with the saved data of the game.[br]
 ## [param played_time_millis]: Optional. The played time of this snapshot in milliseconds.[br]
-## [param progress_value]: Optional. The progress value for this snapshot.
+## [param progress_value]: Optional. The progress value for this snapshot.[br]
+## [param resolution_policy]: Optional. The policy used to resolve a conflict when opening the snapshot. [constant ResolutionPolicy.HIGHEST_PROGRESS] by default.
 func save_game(
 	file_name: String,
 	description: String,
 	save_data: PackedByteArray,
 	played_time_millis: int = 0,
 	progress_value: int = 0,
+	resolution_policy := ResolutionPolicy.HIGHEST_PROGRESS,
 ) -> void:
 	if GodotPlayGameServices.android_plugin:
-		GodotPlayGameServices.android_plugin.saveGame(file_name, description, save_data, played_time_millis, progress_value)
+		GodotPlayGameServices.android_plugin.saveGame(file_name, description, save_data, played_time_millis, progress_value, resolution_policy)
 
 ## Loads game data from the Google Cloud.[br]
 ## [br]
 ## This method emits the [signal game_loaded] signal.[br]
 ## [br]
 ## [param fileName]: The name of the save file. Must be between 1 and 100 non-URL-reserved charactes (a-z, A-Z, 0-9, or the symbols "-", ".", "_", or "~").[br]
-## [param create_if_not_found]: False by default. If true, the snapshot will be created if one cannot be found.
-func load_game(file_name: String, create_if_not_found := false) -> void:
+## [param create_if_not_found]: False by default. If true, the snapshot will be created if one cannot be found.[br]
+## [param resolution_policy]: Optional. The policy used to resolve a conflict when opening the snapshot. [constant ResolutionPolicy.MOST_RECENTLY_MODIFIED] by default.
+func load_game(
+	file_name: String,
+	create_if_not_found := false,
+	resolution_policy := ResolutionPolicy.MOST_RECENTLY_MODIFIED,
+) -> void:
 	if GodotPlayGameServices.android_plugin:
-		GodotPlayGameServices.android_plugin.loadGame(file_name, create_if_not_found)
+		GodotPlayGameServices.android_plugin.loadGame(file_name, create_if_not_found, resolution_policy)
 
 ## Loads the list of [SnapshotMetadata] of the current signed in player.[br]
 ## [br]
@@ -110,6 +140,8 @@ func load_snapshots(force_reload: bool) -> void:
 		GodotPlayGameServices.android_plugin.loadSnapshots(force_reload)
 
 ## Deletes a snapshot. This will delete the data of the snapshot locally and on the server.[br]
+## [br]
+## This method emits the [signal snapshot_deleted] signal.[br]
 ## [br]
 ## [param snapshot_id]: The snapshot identifier.
 func delete_snapshot(snapshot_id: String) -> void:
