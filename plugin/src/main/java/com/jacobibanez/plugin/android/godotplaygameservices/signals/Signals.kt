@@ -28,6 +28,8 @@ fun getSignals(): MutableSet<SignalInfo> = mutableSetOf(
     SnapshotSignals.conflictEmitted,
     SnapshotSignals.snapshotsLoaded,
     SnapshotSignals.snapshotDeleted,
+    SnapshotSignals.gameLoadFailed,
+    SnapshotSignals.snapshotsLoadFailed,
     EventsSignals.eventsLoaded,
     EventsSignals.eventsLoadedByIds,
 
@@ -190,7 +192,8 @@ object SnapshotSignals {
     val conflictEmitted = SignalInfo("conflictEmitted", String::class.java)
 
     /**
-     * This signal is emitted when calling the [com.jacobibanez.plugin.android.godotplaygameservices.GodotAndroidPlugin.loadSnapshots] method.
+     * This signal is emitted when calling the [com.jacobibanez.plugin.android.godotplaygameservices.GodotAndroidPlugin.loadSnapshots] method,
+     * if the snapshots were loaded. Failures emit [snapshotsLoadFailed] instead.
      *
      * @return A [List] of [com.google.android.gms.games.snapshot.SnapshotMetadata](https://developers.google.com/android/reference/com/google/android/gms/games/snapshot/SnapshotMetadata).
      */
@@ -208,6 +211,28 @@ object SnapshotSignals {
         Boolean::class.javaObjectType,
         String::class.java
     )
+
+    /**
+     * This signal is emitted when calling the [com.jacobibanez.plugin.android.godotplaygameservices.GodotAndroidPlugin.loadGame] method,
+     * if the snapshot couldn't be opened or read for any reason other than not being found.
+     *
+     * @return The name of the save file, and the [status code](https://developers.google.com/android/reference/com/google/android/gms/games/GamesClientStatusCodes)
+     * of the failure, or [CommonStatusCodes.ERROR](https://developers.google.com/android/reference/com/google/android/gms/common/api/CommonStatusCodes#ERROR) if there isn't one.
+     */
+    val gameLoadFailed = SignalInfo(
+        "gameLoadFailed",
+        String::class.java,
+        Int::class.javaObjectType
+    )
+
+    /**
+     * This signal is emitted when calling the [com.jacobibanez.plugin.android.godotplaygameservices.GodotAndroidPlugin.loadSnapshots] method,
+     * if the snapshots couldn't be loaded.
+     *
+     * @return The [status code](https://developers.google.com/android/reference/com/google/android/gms/games/GamesClientStatusCodes)
+     * of the failure, or [CommonStatusCodes.ERROR](https://developers.google.com/android/reference/com/google/android/gms/common/api/CommonStatusCodes#ERROR) if there isn't one.
+     */
+    val snapshotsLoadFailed = SignalInfo("snapshotsLoadFailed", Int::class.javaObjectType)
 }
 
 /**

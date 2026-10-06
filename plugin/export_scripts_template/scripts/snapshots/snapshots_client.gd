@@ -31,15 +31,31 @@ signal game_saved(is_saved: bool, save_data_name: String, save_data_description:
 ## [param snapshot]: The loaded snapshot, or null if the snapshot wasn't found.
 signal game_loaded(snapshot: PlayGamesSnapshot)
 
+## Signal emitted after calling the [method load_game] method if the snapshot
+## couldn't be opened or read for any reason other than not being found.[br]
+## [br]
+## [param file_name]: The save file name.[br]
+## [param status_code]: The Google Play Games status code of the failure, or
+## [code]13[/code] ([code]CommonStatusCodes.ERROR[/code]) if there isn't one.
+signal game_load_failed(file_name: String, status_code: int)
+
 ## Signal emitted after saving or loading a game, if a conflict is found.[br]
 ## [br]
 ## [param conflict]: The conflict containing and id and both conflicting snapshots.
 signal conflict_emitted(conflict: PlayGamesSnapshotConflict)
 
-## Signal emitted after calling the [method load_snapshots] method.[br]
+## Signal emitted after calling the [method load_snapshots] method, if the
+## snapshots were loaded.[br]
 ## [br]
 ## [param snapshots]: The list of snapshots for the current signed in player.
 signal snapshots_loaded(snapshots: Array[PlayGamesSnapshotMetadata])
+
+## Signal emitted after calling the [method load_snapshots] method, if the
+## snapshots couldn't be loaded.[br]
+## [br]
+## [param status_code]: The Google Play Games status code of the failure, or
+## [code]13[/code] ([code]CommonStatusCodes.ERROR[/code]) if there isn't one.
+signal snapshots_load_failed(status_code: int)
 
 ## Signal emitted after calling the [method delete_snapshot] method.[br]
 ## [br]
@@ -60,6 +76,10 @@ func _ready() -> void:
 			else:
 				game_loaded.emit(PlayGamesSnapshot.new(safe_dictionary))
 		)
+		GodotPlayGameServices.android_plugin.gameLoadFailed.connect(
+			func(file_name: String, status_code: int):
+				game_load_failed.emit(file_name, status_code)
+		)
 		GodotPlayGameServices.android_plugin.conflictEmitted.connect(func(json_data: String):
 			var safe_dictionary := GodotPlayGameServices.json_marshaller.safe_parse_dictionary(json_data)
 			conflict_emitted.emit(PlayGamesSnapshotConflict.new(safe_dictionary))
@@ -70,6 +90,9 @@ func _ready() -> void:
 			for dictionary: Dictionary in safe_array:
 				snapshots.append(PlayGamesSnapshotMetadata.new(dictionary))
 			snapshots_loaded.emit(snapshots)
+		)
+		GodotPlayGameServices.android_plugin.snapshotsLoadFailed.connect(func(status_code: int):
+			snapshots_load_failed.emit(status_code)
 		)
 		GodotPlayGameServices.android_plugin.snapshotDeleted.connect(
 			func(is_deleted: bool, snapshot_id: String):
@@ -114,7 +137,8 @@ func save_game(
 
 ## Loads game data from the Google Cloud.[br]
 ## [br]
-## This method emits the [signal game_loaded] signal.[br]
+## This method emits exactly one of the [signal game_loaded], [signal conflict_emitted]
+## or [signal game_load_failed] signals.[br]
 ## [br]
 ## [param fileName]: The name of the save file. Must be between 1 and 100 non-URL-reserved charactes (a-z, A-Z, 0-9, or the symbols "-", ".", "_", or "~").[br]
 ## [param create_if_not_found]: False by default. If true, the snapshot will be created if one cannot be found.[br]
@@ -129,7 +153,8 @@ func load_game(
 
 ## Loads the list of [SnapshotMetadata] of the current signed in player.[br]
 ## [br]
-## This method emits the [signal snapshots_loaded] signal.[br]
+## This method emits the [signal snapshots_loaded] signal, or the
+## [signal snapshots_load_failed] signal if the snapshots couldn't be loaded.[br]
 ## [br]
 ## [param force_reload]: If true, this call will clear any locally cached 
 ## data and attempt to fetch the latest data from the server. Send it set to [code]true[/code]

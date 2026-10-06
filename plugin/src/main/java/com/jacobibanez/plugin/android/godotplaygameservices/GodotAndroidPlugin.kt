@@ -445,8 +445,10 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
     )
 
     /**
-     * Loads game data from the Google Cloud. This method emits the [com.jacobibanez.plugin.android.godotplaygameservices.signals.SnapshotSignals.gameLoaded]
-     * signal.
+     * Loads game data from the Google Cloud. This method emits exactly one of the
+     * [com.jacobibanez.plugin.android.godotplaygameservices.signals.SnapshotSignals.gameLoaded] signal (`null` if the snapshot wasn't found),
+     * the [com.jacobibanez.plugin.android.godotplaygameservices.signals.SnapshotSignals.conflictEmitted] signal, or the
+     * [com.jacobibanez.plugin.android.godotplaygameservices.signals.SnapshotSignals.gameLoadFailed] signal.
      *
      * @param fileName The name of the save file. Must be between 1 and 100 non-URL-reserved
      * characters (a-z, A-Z, 0-9, or the symbols "-", ".", "_", or "~").
@@ -461,7 +463,7 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
     /**
      * Loads the list of [com.google.android.gms.games.snapshot.SnapshotMetadata](https://developers.google.com/android/reference/com/google/android/gms/games/snapshot/SnapshotMetadata)
      * for the current signed in Player. This method emits the [com.jacobibanez.plugin.android.godotplaygameservices.signals.SnapshotSignals.snapshotsLoaded]
-     * signal.
+     * signal, or the [com.jacobibanez.plugin.android.godotplaygameservices.signals.SnapshotSignals.snapshotsLoadFailed] signal if the snapshots couldn't be loaded.
      *
      * @param forceReload If true, this call will clear any locally cached data and attempt to fetch
      * the latest data from the server.
